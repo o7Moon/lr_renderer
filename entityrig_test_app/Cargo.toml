@@ -1,0 +1,11 @@
+[package]
+name = "entityrig_test_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytemuck = "1.25.0"
+json = "0.12.4"
+lr_renderer = { path = "../lr_renderer" }
+pollster = "0.4.0"
+winit = "0.30.12"

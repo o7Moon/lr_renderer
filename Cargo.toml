@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = [ "entityrig_test_app","lr_renderer"]
