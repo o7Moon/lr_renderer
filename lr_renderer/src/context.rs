@@ -1,4 +1,4 @@
-use wgpu::{Adapter, Device, Queue, Surface};
+use wgpu::{Adapter, Device, Queue, Surface, wgt::WgpuHasDisplayHandle};
 
 pub struct Context<'a> {
     pub adapter: Adapter,
@@ -27,10 +27,12 @@ impl From<wgpu::RequestDeviceError> for ContextNewError {
 impl<'a> Context<'a> {
     pub async fn new(
         window_handle: Option<impl Into<wgpu::SurfaceTarget<'a>>>,
+        display_handle: Option<Box<dyn WgpuHasDisplayHandle>>,
     ) -> Result<Self, ContextNewError> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
+        let instance = wgpu::Instance::new(if let Some(display) = display_handle {
+            wgpu::InstanceDescriptor::new_with_display_handle(display)
+        } else {
+            wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         let surface = if let Some(handle) = window_handle {

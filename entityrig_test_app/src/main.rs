@@ -77,9 +77,13 @@ impl<'a> ApplicationHandler for App<'a> {
                 )
                 .unwrap(),
         ));
-        self.renderer = Renderer::new(self.window.clone(), Some((640, 360)))
-            .block_on()
-            .ok();
+        self.renderer = Renderer::new(
+            self.window.clone(),
+            Some(Box::new(event_loop.owned_display_handle())),
+            Some((640, 360)),
+        )
+        .block_on()
+        .ok();
         if let Some(renderer) = &mut self.renderer {
             /*lines.put_line(
                 SimLine {

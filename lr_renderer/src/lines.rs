@@ -26,7 +26,7 @@ impl LineRenderer {
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Line Renderer Layout"),
-                bind_group_layouts: &[camera_layout, LineLayerBuffer::get_layout(rend)],
+                bind_group_layouts: &[Some(camera_layout), Some(LineLayerBuffer::get_layout(rend))],
                 immediate_size: 0,
             });
 
@@ -296,7 +296,9 @@ impl LineLayerBuffer {
         let Some(staging) = self.writing_view.as_mut() else {
             return;
         };
-        staging[offset as usize..(offset as usize + data.len())].copy_from_slice(data);
+        staging
+            .slice(offset as usize..(offset as usize + data.len()))
+            .copy_from_slice(data);
     }
 
     pub(crate) fn upload_staging(&mut self, rend: &Renderer) {

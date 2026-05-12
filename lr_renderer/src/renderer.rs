@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use wgpu::wgt::WgpuHasDisplayHandle;
+
 use crate::{Context, LineLayerBuffer, Uniform, lines::LineRenderer};
 
 pub struct Renderer<'a> {
@@ -12,21 +14,15 @@ pub struct Renderer<'a> {
 #[derive(Debug)]
 pub enum RenderError {
     NoSurface,
-    SurfaceError(wgpu::SurfaceError),
-}
-
-impl From<wgpu::SurfaceError> for RenderError {
-    fn from(value: wgpu::SurfaceError) -> Self {
-        Self::SurfaceError(value)
-    }
 }
 
 impl<'a> Renderer<'a> {
     pub async fn new(
         window_handle: Option<impl Into<wgpu::SurfaceTarget<'a>>>,
+        display_handle: Option<Box<dyn WgpuHasDisplayHandle>>,
         width_height: Option<(u32, u32)>,
     ) -> Result<Self, crate::context::ContextNewError> {
-        let ctx = Context::new(window_handle).await?;
+        let ctx = Context::new(window_handle, display_handle).await?;
         let sconf = if let Some(surface) = &ctx.surface {
             let caps = surface.get_capabilities(&ctx.adapter);
             let format = caps
@@ -90,7 +86,11 @@ impl<'a> Renderer<'a> {
             None => return Err(RenderError::NoSurface),
         };
 
-        let output = surface.get_current_texture()?;
+        let output = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(tex) => tex,
+            wgpu::CurrentSurfaceTexture::Suboptimal(tex) => tex,
+            _ => return Err(RenderError::NoSurface),
+        };
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
