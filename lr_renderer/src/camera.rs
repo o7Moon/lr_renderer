@@ -1,4 +1,4 @@
-use crate::{Context, Renderer, Uniform};
+use crate::{Context, DataLayout, Renderer, Uniform};
 
 #[derive(PartialEq, Default, Copy, Clone)]
 pub struct Camera {
@@ -54,17 +54,22 @@ impl CameraMatrix {
     }
 }
 
+impl<'a> DataLayout<'a> for CameraMatrix {
+    fn name() -> &'static str {
+        "CameraMatrix"
+    }
+    fn visibility() -> wgpu::ShaderStages {
+        wgpu::ShaderStages::VERTEX
+    }
+}
+
 //                                                    cached last values, dont reupload to gpu if same
-pub struct CameraMatrixUniform(pub Uniform<CameraMatrix>, Option<(Camera, f32)>);
+pub struct CameraMatrixUniform(pub Uniform, Option<(Camera, f32)>);
 
 impl CameraMatrixUniform {
     pub fn new(camera: Camera, aspect_ratio: f32, rend: &mut Renderer) -> Self {
         Self(
-            Uniform::new(
-                CameraMatrix::from(&camera, aspect_ratio),
-                rend,
-                wgpu::ShaderStages::VERTEX,
-            ),
+            Uniform::new(CameraMatrix::from(&camera, aspect_ratio), rend),
             Some((camera, aspect_ratio)),
         )
     }
@@ -83,6 +88,6 @@ impl CameraMatrixUniform {
 
     fn internal_update(&self, camera: Camera, aspect_ratio: f32, ctx: &Context) {
         self.0
-            .update(CameraMatrix::from(&camera, aspect_ratio), ctx);
+            .update(0, CameraMatrix::from(&camera, aspect_ratio), ctx);
     }
 }

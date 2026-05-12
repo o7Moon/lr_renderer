@@ -115,9 +115,9 @@ pub trait ToGpuLine {
     }
 }
 
-const DEFAULT_LINE_COUNT: u64 = 1024; // smallish because we have one of these per layer
+//const DEFAULT_LINE_COUNT: u64 = 1024; // smallish because we have one of these per layer
 
-//const DEFAULT_LINE_COUNT: u64 = 300000; // less small because im prototyping and havent written the
+const DEFAULT_LINE_COUNT: u64 = 300000; // less small because im prototyping and havent written the
 // buffer resizing code yet lmao
 
 type LineId = u32;

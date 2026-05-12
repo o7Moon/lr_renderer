@@ -12,6 +12,7 @@ pub use lines::LineLayerBuffer;
 pub use lines::LineRenderer;
 pub use lines::ToGpuLine;
 pub use renderer::Renderer;
+pub use uniform::DataLayout;
 pub use uniform::Uniform;
 
 pub use wgpu;

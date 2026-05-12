@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use wgpu::wgt::WgpuHasDisplayHandle;
 
-use crate::{Context, LineLayerBuffer, Uniform, lines::LineRenderer};
+use crate::{Context, DataLayout, LineLayerBuffer, camera::CameraMatrix, lines::LineRenderer};
 
 pub struct Renderer<'a> {
     pub ctx: Context<'a>,
@@ -58,12 +58,12 @@ impl<'a> Renderer<'a> {
 
         LineLayerBuffer::ensure_layout(&mut rend);
 
-        Uniform::<u8>::ensure_layout(&mut rend, wgpu::ShaderStages::VERTEX);
+        CameraMatrix::ensure_layout(&mut rend);
         rend.pipelines.insert(
             crate::lines::LINERENDERER_PIPELINE_KEY.to_owned(),
             LineRenderer::init(
                 &rend,
-                Uniform::<u8>::get_layout(&rend, wgpu::ShaderStages::VERTEX),
+                CameraMatrix::get_layout(&rend),
                 if let Some(sconf) = &rend.sconf {
                     sconf.format
                 } else {
