@@ -1,4 +1,4 @@
-use crate::{Context, Renderer};
+use crate::Renderer;
 use wgpu::util::DeviceExt;
 
 /// specifies how to create the bindgrouplayout for some data to get used by the gpu
@@ -47,12 +47,8 @@ pub struct Uniform {
 }
 
 impl<'a> Uniform {
-    pub fn update<T: DataLayout<'a>>(&self, idx: u32, value: T, ctx: &Context) {
-        ctx.queue.write_buffer(
-            &self.buffers[idx as usize],
-            0,
-            &value.get_data_for_entry(idx),
-        );
+    pub fn buffers(&'a self) -> &'a [wgpu::Buffer] {
+        &self.buffers
     }
     pub fn new<T: DataLayout<'a>>(initial_data: T, rend: &'a mut Renderer) -> Self {
         let mut buffers = Vec::new();
@@ -62,7 +58,7 @@ impl<'a> Uniform {
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some(&(T::name().to_owned() + " buffer " + &i.to_string())),
-                    contents: bytemuck::cast_slice(&[initial_data]),
+                    contents: &initial_data.get_data_for_entry(i as u32),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 });
             buffers.push(buffer);

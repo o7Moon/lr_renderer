@@ -87,7 +87,10 @@ impl CameraMatrixUniform {
     }
 
     fn internal_update(&self, camera: Camera, aspect_ratio: f32, ctx: &Context) {
-        self.0
-            .update(0, CameraMatrix::from(&camera, aspect_ratio), ctx);
+        ctx.queue.write_buffer(
+            &self.0.buffers()[0],
+            0,
+            bytemuck::cast_slice(&[CameraMatrix::from(&camera, aspect_ratio)]),
+        );
     }
 }
