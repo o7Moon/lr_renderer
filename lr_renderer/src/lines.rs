@@ -100,7 +100,9 @@ pub struct GpuLine {
 
 pub trait ToGpuLine {
     fn positions(&self) -> [f32; 4];
-    fn width(&self) -> f32;
+    fn width(&self) -> f32 {
+        1.
+    }
 
     fn to_gpu_line(&self) -> GpuLine {
         let pos = self.positions();
