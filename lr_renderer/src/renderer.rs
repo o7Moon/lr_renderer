@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-
 use wgpu::wgt::WgpuHasDisplayHandle;
 
-use crate::{Context, DataLayout, LineLayerBuffer, camera::CameraMatrix, lines::LineRenderer};
+use crate::Context;
 
 pub struct Renderer<'a> {
     pub ctx: Context<'a>,
-    sconf: Option<wgpu::SurfaceConfiguration>,
-    pub pipelines: HashMap<String, wgpu::RenderPipeline>,
-    pub bind_group_layouts: HashMap<String, wgpu::BindGroupLayout>,
+    pub(crate) sconf: Option<wgpu::SurfaceConfiguration>,
+    pub(crate) pipelines: crate::pipelines::RenderPipelineCache,
+    pub(crate) bind_group_layouts: crate::layout::BindGroupLayoutCache,
 }
 
 #[derive(Debug)]
@@ -47,39 +45,21 @@ impl<'a> Renderer<'a> {
         } else {
             None
         };
-        let mut rend = Self {
+        let rend = Self {
             ctx,
             sconf,
-            pipelines: HashMap::new(),
-            bind_group_layouts: HashMap::new(),
+            pipelines: Default::default(),
+            bind_group_layouts: Default::default(),
         };
-
-        // initialize all the renderers
-
-        LineLayerBuffer::ensure_layout(&mut rend);
-
-        CameraMatrix::ensure_layout(&mut rend);
-        rend.pipelines.insert(
-            crate::lines::LINERENDERER_PIPELINE_KEY.to_owned(),
-            LineRenderer::init(
-                &rend,
-                CameraMatrix::get_layout(&rend),
-                if let Some(sconf) = &rend.sconf {
-                    sconf.format
-                } else {
-                    wgpu::TextureFormat::Bgra8UnormSrgb
-                },
-            ),
-        );
 
         Ok(rend)
     }
 
     // assume request_redraw happened before this is called
     pub fn render(
-        &self,
+        &mut self,
         color: wgpu::Color,
-        draw: Option<impl FnOnce(&mut wgpu::RenderPass)>,
+        draw: Option<impl FnOnce(&mut Renderer, &mut wgpu::RenderPass)>,
     ) -> Result<(), RenderError> {
         let surface = match &self.ctx.surface {
             Some(s) => s,
@@ -118,7 +98,7 @@ impl<'a> Renderer<'a> {
                 multiview_mask: None,
             });
             if let Some(draw) = draw {
-                draw(&mut _pass);
+                draw(self, &mut _pass);
             }
         }
 

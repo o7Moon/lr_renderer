@@ -1,6 +1,8 @@
 mod camera;
 mod context;
+mod layout;
 mod lines;
+mod pipelines;
 mod renderer;
 mod uniform;
 

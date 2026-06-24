@@ -174,8 +174,8 @@ impl<'a> ApplicationHandler for App<'a> {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                if let Some(renderer) = &self.renderer {
-                    let drawlines = |pass: &mut wgpu::RenderPass| {
+                if let Some(renderer) = &mut self.renderer {
+                    let drawlines = |renderer: &mut Renderer, pass: &mut wgpu::RenderPass| {
                         for lines in &mut self.layers {
                             LineRenderer::draw(
                                 renderer,

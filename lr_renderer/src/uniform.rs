@@ -18,22 +18,21 @@ pub trait DataLayout<'a>: bytemuck::Pod + bytemuck::NoUninit {
         }]
     }
     fn ensure_layout(rend: &mut Renderer) {
-        let key: String = Self::name().to_owned() + " BindGroup";
-        if !rend.bind_group_layouts.contains_key(&key) {
-            rend.bind_group_layouts.insert(
-                key.clone(),
+        let key = std::any::TypeId::of::<Self>();
+        if !rend.bind_group_layouts.map.contains_key(&key) {
+            rend.bind_group_layouts.map.insert(
+                key,
                 rend.ctx
                     .device
                     .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: Some(&key),
+                        label: Some(Self::name()),
                         entries: &Self::bind_group_entries(),
                     }),
             );
         }
     }
     fn get_layout(rend: &'a Renderer) -> &'a wgpu::BindGroupLayout {
-        let key: String = Self::name().to_owned() + " BindGroup";
-        &rend.bind_group_layouts[&key]
+        &rend.bind_group_layouts.map[&std::any::TypeId::of::<Self>()]
     }
     fn get_data_for_entry(self, idx: u32) -> Vec<u8> {
         let _ = idx;

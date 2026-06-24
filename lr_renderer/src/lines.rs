@@ -1,19 +1,23 @@
 use wgpu::{RenderPass, util::DeviceExt};
 
-use crate::{CameraMatrixUniform, Renderer};
+use crate::{CameraMatrixUniform, DataLayout, Renderer, pipelines::Pipeline};
 use std::collections::HashMap;
 
 pub struct LineRenderer;
 
-pub(crate) const LINERENDERER_PIPELINE_KEY: &str = "LineRenderer";
+#[derive(Eq, PartialEq, Hash, Clone)]
+pub struct LineRendererPipelineKey {}
 
-impl LineRenderer {
-    pub(crate) fn init(
-        rend: &Renderer,
-        camera_layout: &wgpu::BindGroupLayout,
-        format: wgpu::TextureFormat,
-    ) -> wgpu::RenderPipeline {
-        let shader = rend
+impl crate::pipelines::Pipeline for LineRenderer {
+    type Variant = LineRendererPipelineKey;
+
+    fn ensure_dependencies(rend: &mut crate::Renderer) {
+        crate::camera::CameraMatrix::ensure_layout(rend);
+        LineLayerBuffer::ensure_layout(rend);
+    }
+
+    fn compile(renderer: &crate::Renderer, _v: &Self::Variant) -> wgpu::RenderPipeline {
+        let shader = renderer
             .ctx
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -21,16 +25,19 @@ impl LineRenderer {
                 source: wgpu::ShaderSource::Wgsl(include_str!("shaders/line.wgsl").into()),
             });
 
-        let layout = rend
+        let layout = renderer
             .ctx
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Line Renderer Layout"),
-                bind_group_layouts: &[Some(camera_layout), Some(LineLayerBuffer::get_layout(rend))],
+                bind_group_layouts: &[
+                    Some(crate::camera::CameraMatrix::get_layout(renderer)),
+                    Some(LineLayerBuffer::get_layout(renderer)),
+                ],
                 immediate_size: 0,
             });
-
-        rend.ctx
+        renderer
+            .ctx
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Line Renderer"),
@@ -61,7 +68,11 @@ impl LineRenderer {
                     entry_point: Some("fs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format,
+                        format: if let Some(sconf) = &renderer.sconf {
+                            sconf.format
+                        } else {
+                            wgpu::TextureFormat::Bgra8UnormSrgb
+                        },
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::all(),
                     })],
@@ -70,9 +81,11 @@ impl LineRenderer {
                 cache: None,
             })
     }
+}
 
+impl LineRenderer {
     pub fn draw(
-        rend: &Renderer,
+        rend: &mut Renderer,
         buf: &mut LineLayerBuffer,
         pass: &mut RenderPass,
         camera: &CameraMatrixUniform,
@@ -82,7 +95,7 @@ impl LineRenderer {
         }
         pass.set_bind_group(0, Some(&camera.0.bind_group), &[]);
         pass.set_bind_group(1, Some(&buf.bind_group), &[]);
-        pass.set_pipeline(&rend.pipelines[&LINERENDERER_PIPELINE_KEY.to_owned()]);
+        pass.set_pipeline(&LineRenderer::get(rend, LineRendererPipelineKey {}));
         //println!("lines: {}", buf.local_linebuf.len() as u32);
         pass.draw(0..6, 0..buf.local_linebuf.len() as u32);
     }
@@ -184,18 +197,16 @@ pub struct LineLayerBuffer {
     local_index_to_line_id: Vec<u32>,
     local_line_id_to_index: HashMap<LineId, usize>,
     line_buffer: wgpu::Buffer,
-    color_buffer: wgpu::Buffer,
+    _color_buffer: wgpu::Buffer,
     pub(crate) bind_group: wgpu::BindGroup,
     pub(crate) writing_view: Option<wgpu::QueueWriteBufferView>, // implicitly created whenever
                                                                  // making line changes, and submitted before drawing
 }
 
-const LINELAYERLAYOUT_KEY: &str = "LineLayer";
-
 impl LineLayerBuffer {
     pub fn ensure_layout(rend: &mut Renderer) {
-        rend.bind_group_layouts.insert(
-            LINELAYERLAYOUT_KEY.to_owned(),
+        rend.bind_group_layouts.map.insert(
+            std::any::TypeId::of::<Self>(),
             rend.ctx
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -229,47 +240,51 @@ impl LineLayerBuffer {
     }
 
     pub fn get_layout<'a>(rend: &'a Renderer) -> &'a wgpu::BindGroupLayout {
-        &rend.bind_group_layouts[&LINELAYERLAYOUT_KEY.to_owned()]
+        &rend.bind_group_layouts.map[&std::any::TypeId::of::<Self>()]
     }
 
-    pub fn new(rend: &Renderer, color: LayerColor) -> Self {
+    pub fn new(rend: &mut Renderer, color: LayerColor) -> Self {
         let lines: Vec<GpuLine> = Vec::with_capacity(DEFAULT_LINE_COUNT as usize);
-        let ctx = &rend.ctx;
-        let linebuf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        let linebuf = rend.ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Layer Line Buffer"),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
             size: DEFAULT_LINE_COUNT * std::mem::size_of::<GpuLine>() as u64,
             mapped_at_creation: false,
         });
-        let colorbuf = ctx
+        let colorbuf = rend
+            .ctx
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Line Layer Color Buffer"),
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
                 contents: bytemuck::cast_slice(&[color]),
             });
-        let bindgroup = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Line Layer BindGroup"),
-            layout: Self::get_layout(rend),
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &linebuf,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &colorbuf,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-            ],
-        });
+        LineRenderer::ensure_dependencies(rend);
+        let bindgroup = rend
+            .ctx
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Line Layer BindGroup"),
+                layout: Self::get_layout(rend),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &linebuf,
+                            offset: 0,
+                            size: None,
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &colorbuf,
+                            offset: 0,
+                            size: None,
+                        }),
+                    },
+                ],
+            });
 
         Self {
             local_linebuf: lines,
@@ -277,7 +292,7 @@ impl LineLayerBuffer {
             local_index_to_line_id: Vec::new(),
             local_line_id_to_index: HashMap::new(),
             line_buffer: linebuf,
-            color_buffer: colorbuf,
+            _color_buffer: colorbuf,
             writing_view: None,
         }
     }
