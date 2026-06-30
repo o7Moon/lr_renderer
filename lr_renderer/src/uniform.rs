@@ -17,22 +17,23 @@ pub trait DataLayout<'a>: bytemuck::Pod + bytemuck::NoUninit {
             count: None,
         }]
     }
-    fn ensure_layout(rend: &mut Renderer) {
-        let key = std::any::TypeId::of::<Self>();
-        if !rend.bind_group_layouts.map.contains_key(&key) {
-            rend.bind_group_layouts.map.insert(
-                key,
-                rend.ctx
-                    .device
-                    .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                        label: Some(Self::name()),
-                        entries: &Self::bind_group_entries(),
-                    }),
-            );
-        }
+    fn layout(rend: &Renderer) -> wgpu::BindGroupLayout {
+        rend.ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some(Self::name()),
+                entries: &Self::bind_group_entries(),
+            })
     }
-    fn get_layout(rend: &'a Renderer) -> &'a wgpu::BindGroupLayout {
-        &rend.bind_group_layouts.map[&std::any::TypeId::of::<Self>()]
+    fn get_layout(rend: &'a Renderer) -> wgpu::BindGroupLayout {
+        let key = std::any::TypeId::of::<Self>();
+        rend.bind_group_layouts
+            .lock()
+            .unwrap()
+            .map
+            .entry(key)
+            .or_insert_with(|| Self::layout(rend))
+            .clone()
     }
     fn get_data_for_entry(self, idx: u32) -> Vec<u8> {
         let _ = idx;
@@ -63,14 +64,13 @@ impl<'a> Uniform {
             buffers.push(buffer);
         }
 
-        T::ensure_layout(rend);
         let bind_group_layout = T::get_layout(rend);
         let bind_group = rend
             .ctx
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(&(T::name().to_owned() + " BindGroup")),
-                layout: bind_group_layout,
+                layout: &bind_group_layout,
                 entries: &buffers
                     .iter()
                     .enumerate()

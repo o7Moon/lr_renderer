@@ -11,11 +11,6 @@ pub struct LineRendererPipelineKey {}
 impl crate::pipelines::Pipeline for LineRenderer {
     type Variant = LineRendererPipelineKey;
 
-    fn ensure_dependencies(rend: &mut crate::Renderer) {
-        crate::camera::CameraMatrix::ensure_layout(rend);
-        LineLayerBuffer::ensure_layout(rend);
-    }
-
     fn compile(renderer: &crate::Renderer, _v: &Self::Variant) -> wgpu::RenderPipeline {
         let shader = renderer
             .ctx
@@ -31,8 +26,8 @@ impl crate::pipelines::Pipeline for LineRenderer {
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Line Renderer Layout"),
                 bind_group_layouts: &[
-                    Some(crate::camera::CameraMatrix::get_layout(renderer)),
-                    Some(LineLayerBuffer::get_layout(renderer)),
+                    Some(&crate::camera::CameraMatrix::get_layout(renderer)),
+                    Some(&LineLayerBuffer::get_layout(renderer)),
                 ],
                 immediate_size: 0,
             });
@@ -85,7 +80,7 @@ impl crate::pipelines::Pipeline for LineRenderer {
 
 impl LineRenderer {
     pub fn draw(
-        rend: &mut Renderer,
+        rend: &Renderer,
         buf: &mut LineLayerBuffer,
         pass: &mut RenderPass,
         camera: &CameraMatrixUniform,
@@ -204,46 +199,49 @@ pub struct LineLayerBuffer {
 }
 
 impl LineLayerBuffer {
-    pub fn ensure_layout(rend: &mut Renderer) {
-        rend.bind_group_layouts.map.insert(
-            std::any::TypeId::of::<Self>(),
-            rend.ctx
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Uniform<T> BindGroupLayout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            // Line Data
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+    fn layout(rend: &Renderer) -> wgpu::BindGroupLayout {
+        rend.ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Uniform<T> BindGroupLayout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        // Line Data
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            // Layer Color
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        // Layer Color
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                    ],
-                }),
-        );
+                        count: None,
+                    },
+                ],
+            })
     }
 
-    pub fn get_layout<'a>(rend: &'a Renderer) -> &'a wgpu::BindGroupLayout {
-        &rend.bind_group_layouts.map[&std::any::TypeId::of::<Self>()]
+    pub fn get_layout(rend: &Renderer) -> wgpu::BindGroupLayout {
+        rend.bind_group_layouts
+            .lock()
+            .unwrap()
+            .map
+            .entry(std::any::TypeId::of::<Self>())
+            .or_insert_with(|| Self::layout(rend))
+            .clone()
     }
 
-    pub fn new(rend: &mut Renderer, color: LayerColor) -> Self {
+    pub fn new(rend: &Renderer, color: LayerColor) -> Self {
         let lines: Vec<GpuLine> = Vec::with_capacity(DEFAULT_LINE_COUNT as usize);
         let linebuf = rend.ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Layer Line Buffer"),
@@ -259,13 +257,12 @@ impl LineLayerBuffer {
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
                 contents: bytemuck::cast_slice(&[color]),
             });
-        LineRenderer::ensure_dependencies(rend);
         let bindgroup = rend
             .ctx
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Line Layer BindGroup"),
-                layout: Self::get_layout(rend),
+                layout: &Self::get_layout(rend),
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,

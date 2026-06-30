@@ -175,7 +175,7 @@ impl<'a> ApplicationHandler for App<'a> {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(renderer) = &mut self.renderer {
-                    let drawlines = |renderer: &mut Renderer, pass: &mut wgpu::RenderPass| {
+                    let drawlines = |renderer: &Renderer, pass: &mut wgpu::RenderPass| {
                         for lines in &mut self.layers {
                             LineRenderer::draw(
                                 renderer,

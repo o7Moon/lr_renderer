@@ -50,17 +50,27 @@ pub(crate) trait Pipeline {
     type Variant: Eq + PartialEq + std::hash::Hash + Clone + 'static;
 
     fn compile(renderer: &crate::Renderer, v: &Self::Variant) -> wgpu::RenderPipeline;
-    fn ensure_dependencies(_renderer: &mut crate::Renderer) {}
-    fn get(renderer: &mut crate::Renderer, v: Self::Variant) -> wgpu::RenderPipeline {
-        if let Some(pipeline) = renderer.pipelines.map.get(&key_of(v.clone())) {
+    fn get(renderer: &crate::Renderer, v: Self::Variant) -> wgpu::RenderPipeline {
+        if let Some(pipeline) = renderer
+            .pipelines
+            .lock()
+            .unwrap()
+            .map
+            .get(&key_of(v.clone()))
+        {
             return pipeline.clone();
         }
-        Self::ensure_dependencies(renderer); // like bind groups or whatever that may need mutable
-        // access to the renderer before calling compile()
         let pipeline = Self::compile(renderer, &v);
-        renderer.pipelines.map.insert(key_of(v.clone()), pipeline);
         renderer
             .pipelines
+            .lock()
+            .unwrap()
+            .map
+            .insert(key_of(v.clone()), pipeline);
+        renderer
+            .pipelines
+            .lock()
+            .unwrap()
             .map
             .get(&key_of(v.clone()))
             .unwrap()

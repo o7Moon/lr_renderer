@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use wgpu::wgt::WgpuHasDisplayHandle;
 
 use crate::Context;
@@ -5,8 +6,8 @@ use crate::Context;
 pub struct Renderer<'a> {
     pub ctx: Context<'a>,
     pub(crate) sconf: Option<wgpu::SurfaceConfiguration>,
-    pub(crate) pipelines: crate::pipelines::RenderPipelineCache,
-    pub(crate) bind_group_layouts: crate::layout::BindGroupLayoutCache,
+    pub(crate) pipelines: Mutex<crate::pipelines::RenderPipelineCache>,
+    pub(crate) bind_group_layouts: Mutex<crate::layout::BindGroupLayoutCache>,
 }
 
 #[derive(Debug)]
@@ -57,9 +58,9 @@ impl<'a> Renderer<'a> {
 
     // assume request_redraw happened before this is called
     pub fn render(
-        &mut self,
+        &self,
         color: wgpu::Color,
-        draw: Option<impl FnOnce(&mut Renderer, &mut wgpu::RenderPass)>,
+        draw: Option<impl FnOnce(&Renderer, &mut wgpu::RenderPass)>,
     ) -> Result<(), RenderError> {
         let surface = match &self.ctx.surface {
             Some(s) => s,
